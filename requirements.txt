@@ -4,3 +4,4 @@ requests
 beautifulsoup4
 python-multipart
 aiofiles
+urllib3==1.26.15
