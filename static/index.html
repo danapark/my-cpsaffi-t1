@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>쿠팡 제휴 검색</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>@keyframes fadeIn{from{opacity:0}to{opacity:1}}.fade-in{animation:fadeIn .5s ease-in}</style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="container mx-auto max-w-4xl">
+        <h1 class="text-3xl font-bold text-center mb-8 text-blue-600">쿠팡 제휴 검색</h1>
+        <form id="search-form" class="mb-8">
+            <div class="flex flex-col space-y-4">
+                <input type="text" id="query" name="query" required placeholder="검색어 입력" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="channel-id" name="channel_id" required placeholder="채널 ID 입력" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="text" id="partners-code" name="partners_code" required placeholder="파트너스 코드 입력" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex space-x-4">
+                    <select id="sort-by" name="sort_by" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="coupang_ranking" selected>쿠팡 랭킹순</option>
+                        <option value="sales">판매량순</option>
+                        <option value="review_count">리뷰 수</option>
+                        <option value="rating">평점순</option>
+                        <option value="price_high">높은가격순</option>
+                        <option value="price_low">낮은가격순</option>
+                    </select>
+                    <select id="product-count" name="product_count" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="1">Top 1</option>
+                        <option value="3">Top 3</option>
+                        <option value="5">Top 5</option>
+                        <option value="10" selected>Top 10</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300">검색</button>
+            </div>
+        </form>
+        <div id="loading" class="text-center hidden">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            <p class="mt-2 text-gray-600">검색 중...</p>
+        </div>
+        <div id="error" class="text-center text-red-500 hidden"></div>
+        <div id="results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <div id="analysis" class="mt-8"></div>
+        <div id="html-code" class="mt-8 hidden">
+            <h2 class="text-2xl font-bold mb-4 text-blue-600">생성된 HTML 코드</h2>
+            <div class="relative">
+                <textarea id="generated-html" rows="10" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" readonly></textarea>
+                <button id="copy-button" class="absolute top-2 right-2 px-4 py-2 bg-blue-500 text-white font-semibold rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-300">복사</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function(){
+            function $(id){return document.getElementById(id)}
+            
+            function displayResults(results){
+                $('results').innerHTML = results.map(p => `
+                    <div class="bg-white rounded-lg shadow-md overflow-hidden transition duration-300 hover:shadow-lg fade-in">
+                        <img src="${p.image_url}" alt="${p.name}" class="w-full h-48 object-cover">
+                        <div class="p-4">
+                            <h2 class="text-lg font-semibold mb-2 line-clamp-2">${p.name}</h2>
+                            <p class="text-gray-600 mb-2">가격: ${Number(p.price).toLocaleString()}원</p>
+                            <p class="text-gray-600 mb-2">평점: ${p.rating}</p>
+                            <p class="text-gray-600 mb-4">리뷰: ${Number(p.review_count).toLocaleString()}개</p>
+                            <a href="${p.url}" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-300">구매하기</a>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        
+            function displayAnalysis(a){
+                $('analysis').innerHTML = `
+                    <div class="bg-white rounded-lg shadow-md p-6 fade-in">
+                        <h2 class="text-2xl font-bold mb-4 text-blue-600">분석 결과</h2>
+                        <ul class="space-y-2">
+                            <li>평균 가격: ${Number(a['평균 가격']).toLocaleString()}원</li>
+                            <li>최고 가격 상품: ${a['최고 가격 상품']}</li>
+                            <li>최저 가격 상품: ${a['최저 가격 상품']}</li>
+                            <li>평균 평점: ${a['평균 평점'].toFixed(2)}</li>
+                            <li>총 리뷰 수: ${Number(a['총 리뷰 수']).toLocaleString()}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        
+            function generateHtmlCode(results){
+                const htmlContent = `
+                    <div class="product-grid">
+                        ${results.map(p => `
+                            <div class="product-item">
+                                <img src="${p.image_url}" alt="${p.name}" class="product-image">
+                                <h2 class="product-name">${p.name}</h2>
+                                <p class="product-price">가격: ${Number(p.price).toLocaleString()}원</p>
+                                <p class="product-rating">평점: ${p.rating}</p>
+                                <p class="product-reviews">리뷰: ${Number(p.review_count).toLocaleString()}개</p>
+                                <a href="${p.url}" target="_blank" class="product-link">구매하기</a>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <style>
+                        .product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px}
+                        .product-item{border:1px solid #ddd;border-radius:8px;padding:10px;text-align:center}
+                        .product-image{width:100%;height:200px;object-fit:cover;border-radius:8px}
+                        .product-name{font-size:16px;font-weight:700;margin:10px 0}
+                        .product-price,.product-rating,.product-reviews{margin:5px 0}
+                        .product-link{display:inline-block;background-color:#4CAF50;color:#fff;padding:10px 15px;text-decoration:none;border-radius:5px;margin-top:10px}
+                    </style>
+                `;
+                $('generated-html').value = htmlContent;
+                $('html-code').classList.remove('hidden');
+            }
+        
+            $('search-form').addEventListener('submit', async e => {
+                e.preventDefault();
+                const query = $('query').value;
+                const sortBy = $('sort-by').value;
+                const productCount = $('product-count').value;
+                const channelId = $('channel-id').value;
+                const partnersCode = $('partners-code').value;
+        
+                $('loading').classList.remove('hidden');
+                $('error').classList.add('hidden');
+                $('results').innerHTML = '';
+                $('analysis').innerHTML = '';
+                $('html-code').classList.add('hidden');
+        
+                try {
+                    const response = await fetch('/search', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                        body: `query=${encodeURIComponent(query)}&sort_by=${encodeURIComponent(sortBy)}&product_count=${encodeURIComponent(productCount)}&channel_id=${encodeURIComponent(channelId)}&partners_code=${encodeURIComponent(partnersCode)}`
+                    });
+                    const data = await response.json();
+                    $('loading').classList.add('hidden');
+                    if (data.error) {
+                        $('error').textContent = data.error;
+                        $('error').classList.remove('hidden');
+                    } else {
+                        displayResults(data.results);
+                        displayAnalysis(data.analysis);
+                        generateHtmlCode(data.results);
+                    }
+                } catch (error) {
+                    $('loading').classList.add('hidden');
+                    $('error').textContent = '검색 중 오류가 발생했습니다. 다시 시도해 주세요.';
+                    $('error').classList.remove('hidden');
+                }
+            });
+        
+            $('copy-button').addEventListener('click', () => {
+                $('generated-html').select();
+                document.execCommand('copy');
+                alert('HTML 코드가 클립보드에 복사되었습니다.');
+            });
+        })();
+        </script>
+</body>
