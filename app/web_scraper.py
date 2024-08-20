@@ -1,6 +1,7 @@
 import requests
 import random
 import urllib3
+import time
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, urlencode
@@ -70,27 +71,33 @@ def search_coupang(query, num_products=10, sort_by="", channel_id="", partners_c
         "User-Agent": random.choice(user_agents),
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
     }
-    try:
-        response = requests_retry_session().get(url, headers=headers, timeout=30)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        products = []
-        for item in soup.select('li.search-product'):
-            product = {
-                'name': item.select_one('div.name').text.strip() if item.select_one('div.name') else "N/A",
-                'price': item.select_one('strong.price-value').text.strip() if item.select_one('strong.price-value') else "0",
-                'rating': item.select_one('em.rating').text.strip() if item.select_one('em.rating') else 'N/A',
-                'review_count': item.select_one('span.rating-total-count').text.strip('()') if item.select_one('span.rating-total-count') else '0',
-                'url': convert_to_affiliate_link('https://www.coupang.com' + item.select_one('a')['href'], channel_id, partners_code) if item.select_one('a') else "",
-                'image_url': item.select_one('img.search-product-wrap-img')['src'] if item.select_one('img.search-product-wrap-img') else '',
-            }
-            products.append(product)
-            
-            if len(products) >= num_products:
-                break
-        
-        return products
-    except requests.RequestException as e:
-        print(f"Error occurred: {e}")
-        return []
+    for attempt in range(5):  # 최대 5번 시도
+            try:
+                session = requests_retry_session()
+                response = session.get(url, headers=headers, timeout=60)  # 타임아웃을 60초로 증가
+                response.raise_for_status()
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                products = []
+                for item in soup.select('li.search-product'):
+                    product = {
+                        'name': item.select_one('div.name').text.strip() if item.select_one('div.name') else "N/A",
+                        'price': item.select_one('strong.price-value').text.strip() if item.select_one('strong.price-value') else "0",
+                        'rating': item.select_one('em.rating').text.strip() if item.select_one('em.rating') else 'N/A',
+                        'review_count': item.select_one('span.rating-total-count').text.strip('()') if item.select_one('span.rating-total-count') else '0',
+                        'url': convert_to_affiliate_link('https://www.coupang.com' + item.select_one('a')['href'], channel_id, partners_code) if item.select_one('a') else "",
+                        'image_url': item.select_one('img.search-product-wrap-img')['src'] if item.select_one('img.search-product-wrap-img') else '',
+                    }
+                    products.append(product)
+                    
+                    if len(products) >= num_products:
+                        break
+                
+                return products
+            except requests.exceptions.RequestException as e:
+                print(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < 4:  # 마지막 시도가 아니면 잠시 대기
+                    time.sleep(5)  # 5초 대기
+                else:
+                    print("All attempts failed")
+                    return []

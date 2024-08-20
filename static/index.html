@@ -50,25 +50,38 @@
         </div>
     </div>
     <script>
-        (function(){
-            function $(id){return document.getElementById(id)}
-            
-            function displayResults(results){
-                $('results').innerHTML = results.map(p => `
-                    <div class="bg-white rounded-lg shadow-md overflow-hidden transition duration-300 hover:shadow-lg fade-in">
-                        <img src="${p.image_url}" alt="${p.name}" class="w-full h-48 object-cover">
-                        <div class="p-4">
-                            <h2 class="text-lg font-semibold mb-2 line-clamp-2">${p.name}</h2>
-                            <p class="text-gray-600 mb-2">가격: ${Number(p.price).toLocaleString()}원</p>
-                            <p class="text-gray-600 mb-2">평점: ${p.rating}</p>
-                            <p class="text-gray-600 mb-4">리뷰: ${Number(p.review_count).toLocaleString()}개</p>
-                            <a href="${p.url}" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-300">구매하기</a>
-                        </div>
-                    </div>
-                `).join('');
+        document.addEventListener('DOMContentLoaded', function() {
+            function $(id) {
+                return document.getElementById(id);
             }
-        
-            function displayAnalysis(a){
+
+            function displayResults(data) {
+                if (data.error) {
+                    $('error').textContent = data.error;
+                    $('error').classList.remove('hidden');
+                    $('results').innerHTML = '';
+                    $('analysis').innerHTML = '';
+                    $('html-code').classList.add('hidden');
+                } else {
+                    $('error').classList.add('hidden');
+                    $('results').innerHTML = data.results.map(p => `
+                        <div class="bg-white rounded-lg shadow-md overflow-hidden transition duration-300 hover:shadow-lg fade-in">
+                            <img src="${p.image_url}" alt="${p.name}" class="w-full h-48 object-cover">
+                            <div class="p-4">
+                                <p class="text-lg font-semibold mb-2 line-clamp-2 product-name">${p.name}</p>
+                                <p class="text-gray-600 mb-2">가격: ${Number(p.price).toLocaleString()}원</p>
+                                <p class="text-gray-600 mb-2">평점: ${p.rating}</p>
+                                <p class="text-gray-600 mb-4">리뷰: ${Number(p.review_count).toLocaleString()}개</p>
+                                <a href="${p.url}" target="_blank" class="inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-300">구매하기</a>
+                            </div>
+                        </div>
+                    `).join('');
+                    displayAnalysis(data.analysis);
+                    generateHtmlCode(data.results);
+                }
+            }
+
+            function displayAnalysis(a) {
                 $('analysis').innerHTML = `
                     <div class="bg-white rounded-lg shadow-md p-6 fade-in">
                         <h2 class="text-2xl font-bold mb-4 text-blue-600">분석 결과</h2>
@@ -82,14 +95,14 @@
                     </div>
                 `;
             }
-        
-            function generateHtmlCode(results){
+
+            function generateHtmlCode(results) {
                 const htmlContent = `
                     <div class="product-grid">
                         ${results.map(p => `
                             <div class="product-item">
                                 <img src="${p.image_url}" alt="${p.name}" class="product-image">
-                                <h2 class="product-name">${p.name}</h2>
+                                <p class="product-name">${p.name}</p>
                                 <p class="product-price">가격: ${Number(p.price).toLocaleString()}원</p>
                                 <p class="product-rating">평점: ${p.rating}</p>
                                 <p class="product-reviews">리뷰: ${Number(p.review_count).toLocaleString()}개</p>
@@ -101,7 +114,7 @@
                         .product-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px}
                         .product-item{border:1px solid #ddd;border-radius:8px;padding:10px;text-align:center}
                         .product-image{width:100%;height:200px;object-fit:cover;border-radius:8px}
-                        .product-name{font-size:16px;font-weight:700;margin:10px 0}
+                        .product-name{font-size:1.5em;font-weight:bold;margin:0.83em 0;line-height:1.2}
                         .product-price,.product-rating,.product-reviews{margin:5px 0}
                         .product-link{display:inline-block;background-color:#4CAF50;color:#fff;padding:10px 15px;text-decoration:none;border-radius:5px;margin-top:10px}
                     </style>
@@ -109,7 +122,7 @@
                 $('generated-html').value = htmlContent;
                 $('html-code').classList.remove('hidden');
             }
-        
+
             $('search-form').addEventListener('submit', async e => {
                 e.preventDefault();
                 const query = $('query').value;
@@ -117,41 +130,35 @@
                 const productCount = $('product-count').value;
                 const channelId = $('channel-id').value;
                 const partnersCode = $('partners-code').value;
-        
                 $('loading').classList.remove('hidden');
                 $('error').classList.add('hidden');
                 $('results').innerHTML = '';
                 $('analysis').innerHTML = '';
                 $('html-code').classList.add('hidden');
-        
                 try {
                     const response = await fetch('/search', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
                         body: `query=${encodeURIComponent(query)}&sort_by=${encodeURIComponent(sortBy)}&product_count=${encodeURIComponent(productCount)}&channel_id=${encodeURIComponent(channelId)}&partners_code=${encodeURIComponent(partnersCode)}`
                     });
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
                     const data = await response.json();
                     $('loading').classList.add('hidden');
-                    if (data.error) {
-                        $('error').textContent = data.error;
-                        $('error').classList.remove('hidden');
-                    } else {
-                        displayResults(data.results);
-                        displayAnalysis(data.analysis);
-                        generateHtmlCode(data.results);
-                    }
+                    displayResults(data);
                 } catch (error) {
                     $('loading').classList.add('hidden');
-                    $('error').textContent = '검색 중 오류가 발생했습니다. 다시 시도해 주세요.';
+                    $('error').textContent = `검색 중 오류가 발생했습니다: ${error.message}`;
                     $('error').classList.remove('hidden');
                 }
             });
-        
+
             $('copy-button').addEventListener('click', () => {
                 $('generated-html').select();
                 document.execCommand('copy');
                 alert('HTML 코드가 클립보드에 복사되었습니다.');
             });
-        })();
+        });
         </script>
 </body>
