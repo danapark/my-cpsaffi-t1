@@ -1,7 +1,8 @@
 fastapi
 uvicorn
 requests
-beautifulsoup4
+httpx==0.23.0
+beautifulsoup4==4.10.0
 python-multipart
 aiofiles
 urllib3==1.26.15
