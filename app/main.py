@@ -1,10 +1,14 @@
 from fastapi import FastAPI, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from bs4 import BeautifulSoup
 from .data_processor import process_data, analyze_data, sort_products
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -37,7 +41,7 @@ async def search(
     partners_code: str = Form(...)
 ):
     if not channel_id or not partners_code:
-        raise HTTPException(status_code=400, detail="채널 ID와 파트너스 코드를 입력해주세요.")
+        return JSONResponse(content={"error": "채널 ID와 파트너스 코드를 입력해주세요."}, status_code=400)
     
     url = f"https://www.coupang.com/np/search?q={query}&channel=user&component=&eventCategory=&trcid=&traid=&sorter={sort_by}&listSize={max(product_count, 20)}"
     headers = {
@@ -46,7 +50,12 @@ async def search(
     }
     
     try:
-        content = await fetch_coupang(url, headers)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers, timeout=120.0)
+        content = response.text
+        logger.debug(f"Coupang response status: {response.status_code}")
+        logger.debug(f"Coupang response content (first 500 chars): {content[:500]}")
+        
         soup = BeautifulSoup(content, 'html.parser')
         
         products = []
@@ -71,4 +80,5 @@ async def search(
         
         return JSONResponse(content={"results": processed_data, "analysis": analysis})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"검색 중 오류가 발생했습니다: {str(e)}")
+        logger.exception("Error occurred during search")
+        return JSONResponse(content={"error": f"검색 중 오류가 발생했습니다: {str(e)}"}, status_code=500)
